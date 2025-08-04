@@ -1,4 +1,3 @@
-// In app/manifest.ts
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
@@ -12,12 +11,12 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#000000",
     icons: [
       {
-        src: "/icon-192x192.png", // Ensure you have an icon at this path in /public
-        sizes: "192x192",
+        src: "/icon512_maskable.png",
+        sizes: "512x512",
         type: "image/png",
       },
       {
-        src: "/icon-512x512.png", // Ensure you have an icon at this path in /public
+        src: "/icon512_rounded.png", 
         sizes: "512x512",
         type: "image/png",
       },
