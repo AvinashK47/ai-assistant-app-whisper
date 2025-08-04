@@ -1,0 +1,17 @@
+const MODEL_ASSETS_TO_CACHE = [
+  // --- Whisper Model Configs & Tokenizer ---
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/config.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/generation_config.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/preprocessor_config.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/tokenizer.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/merges.txt',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/vocab.json',
+
+  // --- Whisper ONNX Model Files ---
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/encoder_model.onnx',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/decoder_model_merged.onnx',
+
+  // --- ONNX Runtime (WASM files) ---
+  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.mjs',
+  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.wasm',
+];
