@@ -1,3 +1,4 @@
+// File: src/app/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -5,6 +6,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
+
+  // --- 1. ADDED NEW STATE FOR THE LLM ---
+  const [llmResponse, setLlmResponse] = useState("");
+  const [isLoadingLlm, setIsLoadingLlm] = useState(false);
+  const [llmError, setLlmError] = useState("");
+  // --- END OF NEW STATE ---
 
   const [modelStatus, setModelStatus] = useState({
     loaded: false,
@@ -15,6 +22,36 @@ export default function Home() {
   const workerRef = useRef<Worker | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  // --- 2. ADDED THE NEW FUNCTION TO CALL OUR API ROUTE ---
+  const handleSendToLlm = async (text: string) => {
+    setIsLoadingLlm(true);
+    setLlmError("");
+    setLlmResponse("");
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: text }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "API request failed");
+      }
+
+      const data = await response.json();
+      setLlmResponse(data.response);
+      // NEXT STAGE: We will trigger TTS from here
+    } catch (err: any) {
+      console.error("Error calling LLM API:", err);
+      setLlmError(err.message);
+    } finally {
+      setIsLoadingLlm(false);
+    }
+  };
+  // --- END OF NEW FUNCTION ---
 
   useEffect(() => {
     if (!workerRef.current) {
@@ -36,7 +73,12 @@ export default function Home() {
           setModelStatus((prev) => ({ ...prev, loaded: true }));
           break;
         case "complete":
-          setTranscript(output.text);
+          // --- 3. KEY CHANGE: TRIGGER THE LLM CALL HERE ---
+          const transcriptText = output.text;
+          setTranscript(transcriptText);
+          // When transcription is done, immediately send the text to the LLM
+          handleSendToLlm(transcriptText);
+          // --- END OF KEY CHANGE ---
           break;
         case "error":
           console.error("Worker error:", error);
@@ -50,7 +92,7 @@ export default function Home() {
     };
 
     workerRef.current.addEventListener("message", onMessageReceived);
-    workerRef.current.postMessage(null); // Kick off model loading
+    workerRef.current.postMessage(null);
 
     return () =>
       workerRef.current?.removeEventListener("message", onMessageReceived);
@@ -58,7 +100,6 @@ export default function Home() {
 
   const processAudio = useCallback(async (audioBlob: Blob) => {
     if (!workerRef.current) return;
-
     try {
       const arrayBuffer = await audioBlob.arrayBuffer();
       const audioContext = new AudioContext({ sampleRate: 16000 });
@@ -73,12 +114,14 @@ export default function Home() {
 
   const handleToggleRecording = useCallback(async () => {
     if (isRecording) {
-      // --- STOP RECORDING ---
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
     } else {
-      // --- START RECORDING ---
       setTranscript("");
+      // --- Also reset the LLM state on new recording ---
+      setLlmResponse("");
+      setLlmError("");
+      // ---
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -86,18 +129,15 @@ export default function Home() {
         const recorder = new MediaRecorder(stream);
         mediaRecorderRef.current = recorder;
         audioChunksRef.current = [];
-
         recorder.ondataavailable = (event) => {
           audioChunksRef.current.push(event.data);
         };
-
         recorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, {
             type: "audio/webm",
           });
           processAudio(audioBlob);
         };
-
         recorder.start();
         setIsRecording(true);
       } catch (error) {
@@ -139,11 +179,23 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-8 p-4 border rounded-lg w-full min-h-[150px] bg-white shadow-inner">
+        <div className="mt-8 p-4 border rounded-lg w-full min-h-[100px] bg-white shadow-inner">
+          <p className="font-semibold text-gray-700">You said:</p>
           <p className="text-gray-600 whitespace-pre-wrap">
-            {transcript || "Your transcript will appear here..."}
+            {transcript || "..."}
           </p>
         </div>
+
+        {/* --- 4. ADDED UI FOR THE LLM RESPONSE --- */}
+        <div className="mt-4 p-4 border rounded-lg w-full min-h-[100px] bg-blue-50 shadow-inner">
+          <p className="font-semibold text-gray-700">AI Assistant says:</p>
+          {isLoadingLlm && <p className="text-gray-500">Thinking...</p>}
+          {llmError && <p className="text-red-500">Error: {llmError}</p>}
+          <p className="text-gray-800 whitespace-pre-wrap">
+            {llmResponse || "..."}
+          </p>
+        </div>
+        {/* --- END OF UI ADDITIONS --- */}
       </div>
     </main>
   );
