@@ -12,9 +12,8 @@ export default function Home() {
     file: "Initializing...",
   });
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const workerRef = useRef<Worker | null>(null);
-  // This will hold the recorded audio chunks
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
@@ -25,7 +24,7 @@ export default function Home() {
     }
 
     const onMessageReceived = (e: MessageEvent) => {
-      const { status, output, file, progress } = e.data;
+      const { status, output, file, progress, error } = e.data;
       switch (status) {
         case "initiate":
           setModelStatus({ loaded: false, progress: 0, file });
@@ -37,11 +36,10 @@ export default function Home() {
           setModelStatus((prev) => ({ ...prev, loaded: true }));
           break;
         case "complete":
-          // The worker now sends the full transcript at once
           setTranscript(output.text);
           break;
         case "error":
-          console.error("Worker error:", e.data.error);
+          console.error("Worker error:", error);
           alert(
             "An error occurred during transcription. Please check the console."
           );
@@ -52,55 +50,62 @@ export default function Home() {
     };
 
     workerRef.current.addEventListener("message", onMessageReceived);
-    // Send a null message to kick off model loading
-    workerRef.current.postMessage(null);
+    workerRef.current.postMessage(null); // Kick off model loading
 
     return () =>
       workerRef.current?.removeEventListener("message", onMessageReceived);
+  }, []);
+
+  const processAudio = useCallback(async (audioBlob: Blob) => {
+    if (!workerRef.current) return;
+
+    try {
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const float32Array = audioBuffer.getChannelData(0);
+      workerRef.current.postMessage(float32Array);
+    } catch (error) {
+      console.error("Error processing audio:", error);
+      alert("Failed to process audio. Please try again.");
+    }
   }, []);
 
   const handleToggleRecording = useCallback(async () => {
     if (isRecording) {
       // --- STOP RECORDING ---
       mediaRecorderRef.current?.stop();
-      mediaRecorderRef.current = null;
       setIsRecording(false);
     } else {
       // --- START RECORDING ---
       setTranscript("");
-      audioChunksRef.current = []; // Clear previous audio chunks
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
+        const recorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        audioChunksRef.current = [];
 
-        const mediaRecorder = new MediaRecorder(stream);
-        mediaRecorderRef.current = mediaRecorder;
-
-        // When a chunk of audio is available, add it to our array
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
+        recorder.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
         };
 
-        // When the recording is stopped, combine all chunks and send to the worker
-        mediaRecorder.onstop = () => {
+        recorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, {
             type: "audio/webm",
           });
-          if (workerRef.current) {
-            workerRef.current.postMessage(audioBlob);
-          }
+          processAudio(audioBlob);
         };
 
-        mediaRecorder.start();
+        recorder.start();
         setIsRecording(true);
       } catch (error) {
         console.error("Error starting microphone:", error);
+        alert("Could not start microphone. Please check permissions.");
       }
     }
-  }, [isRecording]);
+  }, [isRecording, processAudio]);
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-24 bg-gray-50">

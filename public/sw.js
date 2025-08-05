@@ -1,15 +1,16 @@
+// public/sw.js
 
-const CACHE_NAME = 'offline-ai-assets-v3'; // Use a new version name
+const CACHE_NAME = 'offline-ai-assets-v5-whisper-tiny'; // New version for the new model
 const MODEL_ASSETS_TO_CACHE = [
-  // --- CORRECT Distil-Whisper Model URLs ---
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/config.json',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/generation_config.json',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/preprocessor_config.json',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/tokenizer.json',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/merges.txt',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/vocab.json',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/onnx/encoder_model.onnx',
-  'https://huggingface.co/distil-whisper/distil-small.en/resolve/main/onnx/decoder_model.onnx',
+  // --- URLs for Xenova/whisper-tiny.en (Quantized) ---
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/config.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/generation_config.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/preprocessor_config.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/tokenizer.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/merges.txt',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/vocab.json',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/encoder_model_quantized.onnx',
+  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/decoder_model_merged_quantized.onnx',
 
   // --- ONNX Runtime (WASM files) ---
   'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.mjs',
