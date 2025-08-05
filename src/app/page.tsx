@@ -44,9 +44,15 @@ export default function Home() {
       const data = await response.json();
       setLlmResponse(data.response);
       // NEXT STAGE: We will trigger TTS from here
-    } catch (err: any) {
+    } catch (err: unknown) {
+      // <-- THE FIX: 'any' is replaced with 'unknown'
       console.error("Error calling LLM API:", err);
-      setLlmError(err.message);
+      // We now check if it's a real Error object before accessing .message
+      if (err instanceof Error) {
+        setLlmError(err.message);
+      } else {
+        setLlmError("An unknown error occurred.");
+      }
     } finally {
       setIsLoadingLlm(false);
     }
