@@ -1,4 +1,3 @@
-// File: src/app/page.tsx
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -6,12 +5,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-
-  // --- 1. ADDED NEW STATE FOR THE LLM ---
   const [llmResponse, setLlmResponse] = useState("");
   const [isLoadingLlm, setIsLoadingLlm] = useState(false);
   const [llmError, setLlmError] = useState("");
-  // --- END OF NEW STATE ---
 
   const [modelStatus, setModelStatus] = useState({
     loaded: false,
@@ -23,7 +19,6 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // --- 2. ADDED THE NEW FUNCTION TO CALL OUR API ROUTE ---
   const handleSendToLlm = async (text: string) => {
     setIsLoadingLlm(true);
     setLlmError("");
@@ -43,11 +38,11 @@ export default function Home() {
 
       const data = await response.json();
       setLlmResponse(data.response);
-      // NEXT STAGE: We will trigger TTS from here
+
     } catch (err: unknown) {
-      // <-- THE FIX: 'any' is replaced with 'unknown'
+
       console.error("Error calling LLM API:", err);
-      // We now check if it's a real Error object before accessing .message
+
       if (err instanceof Error) {
         setLlmError(err.message);
       } else {
@@ -57,7 +52,6 @@ export default function Home() {
       setIsLoadingLlm(false);
     }
   };
-  // --- END OF NEW FUNCTION ---
 
   useEffect(() => {
     if (!workerRef.current) {
@@ -79,12 +73,9 @@ export default function Home() {
           setModelStatus((prev) => ({ ...prev, loaded: true }));
           break;
         case "complete":
-          // --- 3. KEY CHANGE: TRIGGER THE LLM CALL HERE ---
           const transcriptText = output.text;
           setTranscript(transcriptText);
-          // When transcription is done, immediately send the text to the LLM
           handleSendToLlm(transcriptText);
-          // --- END OF KEY CHANGE ---
           break;
         case "error":
           console.error("Worker error:", error);
@@ -124,10 +115,8 @@ export default function Home() {
       setIsRecording(false);
     } else {
       setTranscript("");
-      // --- Also reset the LLM state on new recording ---
       setLlmResponse("");
       setLlmError("");
-      // ---
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -192,7 +181,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* --- 4. ADDED UI FOR THE LLM RESPONSE --- */}
         <div className="mt-4 p-4 border rounded-lg w-full min-h-[100px] bg-blue-50 shadow-inner">
           <p className="font-semibold text-gray-700">AI Assistant says:</p>
           {isLoadingLlm && <p className="text-gray-500">Thinking...</p>}
@@ -201,7 +189,6 @@ export default function Home() {
             {llmResponse || "..."}
           </p>
         </div>
-        {/* --- END OF UI ADDITIONS --- */}
       </div>
     </main>
   );

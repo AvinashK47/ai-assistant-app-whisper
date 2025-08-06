@@ -8,7 +8,6 @@ const APP_TITLE_TEMPLATE = "%s - PWA App";
 const APP_DESCRIPTION =
   "AI Assistant with TTS and STT integrating offline functionality";
 
-// Now this metadata export is valid again
 export const metadata: Metadata = {
   applicationName: APP_NAME,
   title: {
@@ -52,8 +51,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // The useEffect hook is now gone from here
-
   return (
     <html lang="en">
       <body className={` antialiased`}>

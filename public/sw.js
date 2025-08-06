@@ -1,8 +1,5 @@
-// public/sw.js
-
-const CACHE_NAME = 'offline-ai-assets-v5-whisper-tiny'; // New version for the new model
+const CACHE_NAME = 'offline-ai-assets-v5-whisper-tiny';
 const MODEL_ASSETS_TO_CACHE = [
-  // --- URLs for Xenova/whisper-tiny.en (Quantized) ---
   'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/config.json',
   'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/generation_config.json',
   'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/preprocessor_config.json',
@@ -12,12 +9,10 @@ const MODEL_ASSETS_TO_CACHE = [
   'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/encoder_model_quantized.onnx',
   'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/decoder_model_merged_quantized.onnx',
 
-  // --- ONNX Runtime (WASM files) ---
   'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.mjs',
   'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.wasm',
 ];
 
-// On install, cache all our model assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -27,7 +22,6 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// On fetch, serve from cache if available
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (MODEL_ASSETS_TO_CACHE.includes(url.href)) {
@@ -39,7 +33,6 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// Clean up old caches on activation
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
