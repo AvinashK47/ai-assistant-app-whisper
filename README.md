@@ -91,19 +91,7 @@ Follow these instructions to set up and run the project locally.
     npm run dev
     ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-## 📊 Performance Report
-
-As per the assignment requirements, here is a summary of the application's latency.
-
-* **Testing Conditions:**
-    * **Device:** * **Browser:** * **Network:** | Metric                         | Average Latency (ms) | Notes                                                                   |
-| ------------------------------ | -------------------- | ----------------------------------------------------------------------- |
-| **Speech-to-Text (STT)** | `[TODO]` ms          | Time from end-of-speech to final transcript received from Whisper.      |
-| **LLM API Call** | `[TODO]` ms          | Time for the OpenAI API to process the prompt and return a response.    |
-| **Text-to-Speech (TTS)** | `[TODO]` ms          | Time to synthesize the LLM's text response into playable audio.         |
-| **Total Response Time** | **`[TODO]` ms** | Total time from end-of-speech to audio playback starting.               |
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result. |
 
 ## ⏭️ Future Improvements
 
