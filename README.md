@@ -69,7 +69,7 @@ Follow these instructions to set up and run the project locally.
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/AvinashK47/ai-assistant-app-whisper](https://github.com/AvinashK47/ai-assistant-app-whisper)
+    git clone https://github.com/AvinashK47/ai-assistant-app-whisper
     cd ai-assistant-app-whisper
     ```
 
