@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Prompt is required." }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
