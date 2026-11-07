@@ -1,49 +1,69 @@
-const CACHE_NAME = 'offline-ai-assets-v5-whisper-tiny';
-const MODEL_ASSETS_TO_CACHE = [
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/config.json',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/generation_config.json',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/preprocessor_config.json',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/tokenizer.json',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/merges.txt',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/vocab.json',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/encoder_model_quantized.onnx',
-  'https://huggingface.co/Xenova/whisper-tiny.en/resolve/main/onnx/decoder_model_merged_quantized.onnx',
-
-  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.mjs',
-  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest/dist/ort-wasm-simd-threaded.jsep.wasm',
+const CACHE_NAME = 'ai-assistant-v2';
+const STATIC_ASSETS = [
+  '/',
+  '/manifest.webmanifest',
+  '/icon512_rounded.png',
+  '/icon512_maskable.png',
+  '/whisper-worker.js',
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log(`Service Worker: Caching new model assets in ${CACHE_NAME}`);
-      return cache.addAll(MODEL_ASSETS_TO_CACHE);
+      console.log(`[SW] Pre-caching static app shell`);
+      return Promise.allSettled(
+        STATIC_ASSETS.map((url) =>
+          cache.add(url).catch((err) => console.warn(`[SW] Could not pre-cache ${url}:`, err))
+        )
+      );
     })
   );
-});
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  if (MODEL_ASSETS_TO_CACHE.includes(url.href)) {
-    event.respondWith(
-      caches.match(event.request).then((response) => {
-        return response || fetch(event.request);
-      })
-    );
-  }
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log(`Service Worker: Deleting old cache ${cacheName}`);
-            return caches.delete(cacheName);
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.map((k) => {
+          if (k !== CACHE_NAME) {
+            console.log(`[SW] Removing old cache: ${k}`);
+            return caches.delete(k);
           }
         })
-      );
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  // Only handle GET requests
+  if (event.request.method !== 'GET') return;
+
+  const url = new URL(event.request.url);
+
+  // Do not intercept Next.js development HMR or external non-cached APIs
+  if (url.pathname.startsWith('/api/')) return;
+
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then((networkResponse) => {
+        // Cache successful responses for offline access
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => {
+        // Offline fallback if needed
+        return caches.match('/');
+      });
     })
   );
 });
