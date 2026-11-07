@@ -9,13 +9,23 @@ import { resampleAudioBlobTo16kHz } from "@/lib/audio-utils";
 import { WebSpeechRecognizer } from "@/lib/web-speech";
 
 type STTEngine = "web-speech" | "whisper-wasm";
+type VoicePersona = "Aoede" | "Fenrir" | "Puck" | "Kore";
+
+const VOICE_PERSONAS: { id: VoicePersona; label: string; desc: string }[] = [
+  { id: "Aoede", label: "Aoede", desc: "Studio Clear" },
+  { id: "Fenrir", label: "Fenrir", desc: "Deep Male" },
+  { id: "Puck", label: "Puck", desc: "Energetic" },
+  { id: "Kore", label: "Kore", desc: "Warm Female" },
+];
 
 export default function Home() {
   const [assistantState, setAssistantState] = useState<AssistantState>("idle");
   const [audioLevel, setAudioLevel] = useState(0);
   const [selectedEngine, setSelectedEngine] = useState<STTEngine>("web-speech");
+  const [selectedVoice, setSelectedVoice] = useState<VoicePersona>("Aoede");
   const [liveInterimText, setLiveInterimText] = useState("");
   const [textInput, setTextInput] = useState("");
+  const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
 
   const [modelStatus, setModelStatus] = useState({
     loaded: false,
@@ -46,35 +56,52 @@ export default function Home() {
   const turnStartTimeRef = useRef<number>(0);
   const spokenTextRef = useRef<string>("");
 
-  // Initialize TTS & WebSpeech
-  useEffect(() => {
-    ttsRef.current = new TTSController((state) => {
-      if (!state.isPlaying && assistantState === "speaking") {
-        setAssistantState("idle");
-      }
-    });
-
-    webSpeechRef.current = new WebSpeechRecognizer();
-
-    return () => {
-      ttsRef.current?.stop();
-      webSpeechRef.current?.stop();
-    };
-  }, [assistantState]);
-
-  // Audio level monitoring during recording
-  const startAudioMeter = (stream: MediaStream) => {
+  // Initialize shared Web Audio Analyser
+  const getOrCreateAnalyser = useCallback((): AnalyserNode | null => {
+    if (analyserRef.current) return analyserRef.current;
     try {
       const AudioCtxClass =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioCtx = new AudioCtxClass();
-      audioContextRef.current = audioCtx;
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
+      if (!AudioCtxClass) return null;
+      const ctx = audioContextRef.current || new AudioCtxClass();
+      audioContextRef.current = ctx;
+      const analyser = ctx.createAnalyser();
       analyser.fftSize = 64;
-      source.connect(analyser);
       analyserRef.current = analyser;
+      return analyser;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Initialize TTS & WebSpeech
+  useEffect(() => {
+    const analyser = getOrCreateAnalyser();
+    const tts = new TTSController((state) => {
+      if (!state.isPlaying) {
+        setAssistantState("idle");
+        setActivePlayingId(null);
+      }
+    }, analyser);
+
+    ttsRef.current = tts;
+    webSpeechRef.current = new WebSpeechRecognizer();
+
+    return () => {
+      tts.stop();
+      webSpeechRef.current?.stop();
+    };
+  }, [getOrCreateAnalyser]);
+
+  // Audio level monitoring during recording
+  const startAudioMeter = useCallback((stream: MediaStream) => {
+    try {
+      const analyser = getOrCreateAnalyser();
+      if (!analyser || !audioContextRef.current) return;
+
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyser);
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
@@ -86,7 +113,7 @@ export default function Home() {
           sum += dataArray[i];
         }
         const average = sum / dataArray.length;
-        setAudioLevel(Math.min(average / 128, 1)); // Normalized 0 to 1
+        setAudioLevel(Math.min(average / 128, 1));
         animFrameRef.current = requestAnimationFrame(updateMeter);
       };
 
@@ -94,54 +121,74 @@ export default function Home() {
     } catch (err) {
       console.warn("Could not start audio level visualizer:", err);
     }
-  };
+  }, [getOrCreateAnalyser]);
 
-  const stopAudioMeter = () => {
+  const stopAudioMeter = useCallback(() => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
     }
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     setAudioLevel(0);
-  };
+  }, []);
 
-  // Play TTS Response
-  const playTTS = useCallback(async (text: string) => {
-    if (!ttsRef.current) return;
-    setAssistantState("speaking");
-    const ttsStartTime = performance.now();
+  // Play Neural Audio or SpeechSynthesis
+  const playAudioTurn = useCallback(
+    async (turn: MessageTurn) => {
+      if (!ttsRef.current) return;
 
-    try {
-      const timeToFirstWord = await ttsRef.current.speak(text, {
-        onEnd: () => {
-          setAssistantState("idle");
-        },
-        onError: () => {
-          setAssistantState("idle");
-        },
-      });
+      // Ensure audio context is running
+      await ttsRef.current.ensureAudioContext();
 
-      const ttsDuration = timeToFirstWord || Math.round(performance.now() - ttsStartTime);
-      setTelemetry((prev) => {
-        const total = (prev.sttMs || 0) + (prev.llmMs || 0) + ttsDuration;
-        return { ...prev, ttsMs: ttsDuration, totalMs: total };
-      });
-    } catch (err) {
-      console.error("TTS playback error:", err);
-      setAssistantState("idle");
-    }
+      setAssistantState("speaking");
+      setActivePlayingId(turn.id);
+      const ttsStartTime = performance.now();
+
+      try {
+        const timeToFirstSound = await ttsRef.current.speak(
+          { text: turn.text, audioUrl: turn.audioUrl },
+          {
+            onEnd: () => {
+              setAssistantState("idle");
+              setActivePlayingId(null);
+            },
+            onError: () => {
+              setAssistantState("idle");
+              setActivePlayingId(null);
+            },
+          }
+        );
+
+        const latency = timeToFirstSound || Math.round(performance.now() - ttsStartTime);
+        setTelemetry((prev) => {
+          const total = (prev.sttMs || 0) + (prev.llmMs || 0) + latency;
+          return { ...prev, ttsMs: latency, totalMs: total };
+        });
+      } catch (err) {
+        console.warn("Audio playback ended/interrupted:", err);
+        setAssistantState("idle");
+        setActivePlayingId(null);
+      }
+    },
+    []
+  );
+
+  // Stop currently playing audio
+  const handleStopAudio = useCallback(() => {
+    ttsRef.current?.stop();
+    setAssistantState("idle");
+    setActivePlayingId(null);
   }, []);
 
   // Send prompt to Gemini API
   const handleSendToLlm = useCallback(
     async (promptText: string, sttDuration: number) => {
+      // Warm up audio context on user action
+      ttsRef.current?.ensureAudioContext().catch(() => {});
+
       setIsLlmLoading(true);
       setAssistantState("thinking");
       setLiveInterimText("");
@@ -166,7 +213,10 @@ export default function Home() {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: promptText }),
+          body: JSON.stringify({
+            prompt: promptText,
+            voice: selectedVoice,
+          }),
         });
 
         if (!response.ok) {
@@ -183,21 +233,26 @@ export default function Home() {
         }));
 
         const assistantReply = data.response;
+        const neuralAudioUrl = data.audio || null;
+        const assistantTurnId = crypto.randomUUID();
+
+        // Release loading indicator immediately so it never hangs
+        setIsLlmLoading(false);
+
+        const assistantTurn: MessageTurn = {
+          id: assistantTurnId,
+          role: "assistant",
+          text: assistantReply,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          llmLatency: llmDuration,
+          audioUrl: neuralAudioUrl,
+        };
 
         // Add assistant turn to conversation
-        setConversation((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            text: assistantReply,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            llmLatency: llmDuration,
-          },
-        ]);
+        setConversation((prev) => [...prev, assistantTurn]);
 
-        // Play vocal answer
-        await playTTS(assistantReply);
+        // Trigger Audio Playback directly
+        await playAudioTurn(assistantTurn);
       } catch (err: unknown) {
         console.error("Error generating LLM response:", err);
         const errorMessage =
@@ -212,11 +267,10 @@ export default function Home() {
           },
         ]);
         setAssistantState("idle");
-      } finally {
         setIsLlmLoading(false);
       }
     },
-    [playTTS]
+    [playAudioTurn, selectedVoice]
   );
 
   // Initialize Whisper Web Worker in background
@@ -299,10 +353,12 @@ export default function Home() {
 
   // Start or Stop Voice Recording
   const handleOrbClick = useCallback(async () => {
+    // Warm up audio context on click
+    ttsRef.current?.ensureAudioContext().catch(() => {});
+
     // 1. If currently speaking, interrupt speech immediately
     if (assistantState === "speaking") {
-      ttsRef.current?.stop();
-      setAssistantState("idle");
+      handleStopAudio();
       return;
     }
 
@@ -364,16 +420,14 @@ export default function Home() {
                 if (err === "not-allowed") {
                   alert("Microphone permission was denied. Please allow microphone access.");
                 } else if (err === "network") {
-                  alert("Web Speech API network error (Google Speech server unreachable). Switching automatically to Whisper WASM.");
+                  alert("Web Speech API network error. Switching automatically to Whisper WASM.");
                   setSelectedEngine("whisper-wasm");
                   if (!modelStatus.loaded) {
                     workerRef.current?.postMessage({ type: "init" });
                   }
                 }
               },
-              onEnd: () => {
-                // Keep tracks managed until user explicitly stops or sends
-              },
+              onEnd: () => {},
             });
             setAssistantState("listening");
           } else {
@@ -397,7 +451,9 @@ export default function Home() {
 
           recorder.onstop = () => {
             stopAudioMeter();
-            const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+            const audioBlob = new Blob(audioChunksRef.current, {
+              type: recorder.mimeType || "audio/webm",
+            });
             processAudioWhisper(audioBlob);
           };
 
@@ -410,7 +466,16 @@ export default function Home() {
         setAssistantState("idle");
       }
     }
-  }, [assistantState, handleSendToLlm, modelStatus.loaded, processAudioWhisper, selectedEngine]);
+  }, [
+    assistantState,
+    handleSendToLlm,
+    handleStopAudio,
+    modelStatus.loaded,
+    processAudioWhisper,
+    selectedEngine,
+    startAudioMeter,
+    stopAudioMeter,
+  ]);
 
   // Handle Manual Text Submission
   const handleTextSubmit = (e: React.FormEvent) => {
@@ -438,7 +503,7 @@ export default function Home() {
   }, [handleOrbClick]);
 
   return (
-    <main className="min-h-screen bg-[#0a0c10] text-zinc-100 flex flex-col items-center justify-between p-4 sm:p-8 font-sans selection:bg-cyan-500 selection:text-zinc-950">
+    <main className="min-h-screen bg-[#090b10] text-zinc-100 flex flex-col items-center justify-between p-4 sm:p-8 font-sans selection:bg-cyan-500 selection:text-zinc-950">
       {/* Top Header */}
       <header className="w-full max-w-2xl flex flex-wrap items-center justify-between gap-3 py-3 border-b border-zinc-850/80">
         <div className="flex items-center gap-3">
@@ -458,7 +523,7 @@ export default function Home() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-400 font-mono">
-              WASM Whisper • Web Workers • Gemini Flash Lite • Client TTS
+              WASM Whisper • Web Audio DSP • Gemini Flash Lite • Neural TTS
             </p>
           </div>
         </div>
@@ -467,7 +532,7 @@ export default function Home() {
         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900/80 border border-zinc-800 text-xs">
           <button
             onClick={() => setSelectedEngine("web-speech")}
-            className={`px-3 py-1 rounded-lg font-medium transition-all ${
+            className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
               selectedEngine === "web-speech"
                 ? "bg-cyan-500 text-zinc-950 font-semibold shadow-sm"
                 : "text-zinc-400 hover:text-zinc-200"
@@ -482,7 +547,7 @@ export default function Home() {
                 workerRef.current?.postMessage({ type: "init" });
               }
             }}
-            className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
               selectedEngine === "whisper-wasm"
                 ? "bg-indigo-600 text-white font-semibold shadow-sm"
                 : "text-zinc-400 hover:text-zinc-200"
@@ -498,7 +563,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Model Download Progress Bar (When Whisper is loading) */}
+      {/* Whisper Download Progress (if loading) */}
       {selectedEngine === "whisper-wasm" && !modelStatus.loaded && (
         <div className="w-full max-w-md my-3 p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 shadow-xl">
           <div className="flex justify-between text-xs text-zinc-400 mb-1.5 font-mono">
@@ -517,6 +582,29 @@ export default function Home() {
         </div>
       )}
 
+      {/* Voice Persona Selector Pill Deck */}
+      <div className="w-full max-w-2xl flex items-center justify-between gap-2 mt-4 px-1 text-xs">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
+          AI VOICE PERSONA:
+        </span>
+        <div className="flex items-center gap-1.5">
+          {VOICE_PERSONAS.map((voice) => (
+            <button
+              key={voice.id}
+              onClick={() => setSelectedVoice(voice.id)}
+              className={`px-2.5 py-1 rounded-lg font-mono text-[11px] transition-all cursor-pointer ${
+                selectedVoice === voice.id
+                  ? "bg-zinc-800 text-cyan-300 border border-cyan-500/50 shadow-sm shadow-cyan-950"
+                  : "bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 border border-zinc-800/60"
+              }`}
+            >
+              {voice.label}{" "}
+              <span className="text-[9px] text-zinc-400 opacity-80">({voice.desc})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Interactive Acoustic Core Visualizer */}
       <div className="flex-1 flex flex-col items-center justify-center w-full">
         <AcousticCore
@@ -528,7 +616,7 @@ export default function Home() {
           analyserNode={analyserRef.current}
         />
 
-        {/* Live Streaming Speech Preview */}
+        {/* Live Interim Speech Preview */}
         {assistantState === "listening" && liveInterimText && (
           <div className="w-full max-w-md my-2 px-4 py-2 rounded-xl bg-zinc-900/90 border border-cyan-500/40 text-center animate-pulse">
             <span className="text-xs text-zinc-400 font-mono">LIVE: </span>
@@ -571,7 +659,9 @@ export default function Home() {
       {/* Conversation Log & Replay View */}
       <ConversationView
         turns={conversation}
-        onReplayTTS={playTTS}
+        onReplayTTS={playAudioTurn}
+        onStopAudio={handleStopAudio}
+        activePlayingId={activePlayingId}
         onClearHistory={() => setConversation([])}
         onSelectPrompt={(prompt) => {
           setTelemetry((prev) => ({ ...prev, sttMs: 0 }));

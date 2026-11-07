@@ -51,7 +51,7 @@ export default function AcousticCore({
         for (let i = 0; i < numBars; i++) {
           const angle = (i / numBars) * Math.PI * 2;
           const val = dataArray[i] / 255;
-          const barHeight = Math.max(val * 32, 4);
+          const barHeight = Math.max(val * 34, 4);
 
           const x1 = centerX + Math.cos(angle) * baseRadius;
           const y1 = centerY + Math.sin(angle) * baseRadius;
@@ -67,12 +67,30 @@ export default function AcousticCore({
           ctx.stroke();
         }
       } else if (state === "speaking") {
-        // Subtle rhythmic pulse wave when speaking
-        const time = Date.now() * 0.005;
+        let hasActiveSignal = false;
+        if (analyserNode) {
+          analyserNode.getByteFrequencyData(dataArray);
+          for (let i = 0; i < numBars; i++) {
+            if (dataArray[i] > 10) {
+              hasActiveSignal = true;
+              break;
+            }
+          }
+        }
+
+        const time = Date.now() * 0.006;
         for (let i = 0; i < numBars; i++) {
           const angle = (i / numBars) * Math.PI * 2;
-          const wave = Math.sin(angle * 4 + time) * 0.5 + 0.5;
-          const barHeight = 4 + wave * 16;
+          let barHeight = 4;
+
+          if (hasActiveSignal && analyserNode) {
+            const val = dataArray[i] / 255;
+            barHeight = Math.max(val * 38, 4);
+          } else {
+            // Harmonic rhythmic fallback wave
+            const wave = Math.sin(angle * 4 + time) * 0.5 + 0.5;
+            barHeight = 4 + wave * 16;
+          }
 
           const x1 = centerX + Math.cos(angle) * baseRadius;
           const y1 = centerY + Math.sin(angle) * baseRadius;
@@ -82,8 +100,8 @@ export default function AcousticCore({
           ctx.beginPath();
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
-          ctx.strokeStyle = `rgba(16, 185, 129, ${0.5 + wave * 0.5})`;
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = `rgba(16, 185, 129, ${0.5 + (barHeight / 40) * 0.5})`;
+          ctx.lineWidth = 2.5;
           ctx.lineCap = "round";
           ctx.stroke();
         }
@@ -135,14 +153,14 @@ export default function AcousticCore({
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
-            LLM STREAM
+            GEMINI LLM STREAM
           </span>
         );
       case "speaking":
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            AUDIO SYNTH PLAYBACK
+            NEURAL AUDIO PLAYBACK
           </span>
         );
       case "idle":
@@ -178,7 +196,7 @@ export default function AcousticCore({
               ? "bg-indigo-500/25 scale-110"
               : state === "speaking"
               ? "bg-emerald-500/25 scale-115"
-              : "bg-blue-600/10 scale-95"
+              : "bg-cyan-600/10 scale-95"
           }`}
         />
 
@@ -199,7 +217,7 @@ export default function AcousticCore({
               ? "bg-gradient-to-b from-indigo-500 to-purple-600 text-white shadow-indigo-500/30"
               : state === "speaking"
               ? "bg-gradient-to-b from-emerald-500 to-teal-700 text-zinc-950 shadow-emerald-500/30 scale-105"
-              : "bg-gradient-to-b from-zinc-800 to-zinc-900 text-zinc-100 hover:from-zinc-700 hover:to-zinc-850 shadow-black/60 border border-zinc-700/60"
+              : "bg-gradient-to-b from-zinc-800 to-zinc-900 text-zinc-100 hover:from-zinc-750 hover:to-zinc-850 shadow-black/60 border border-zinc-700/60"
           }`}
         >
           {/* Central Visual Icon */}
@@ -240,7 +258,7 @@ export default function AcousticCore({
 
           {state === "idle" && (
             <div className="flex flex-col items-center gap-1 text-zinc-300 hover:text-white">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" />
               </svg>
