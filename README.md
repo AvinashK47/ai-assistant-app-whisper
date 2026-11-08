@@ -1,6 +1,14 @@
 # Offline-First AI Voice Assistant
 
-A real-time, privacy-focused voice assistant that runs speech-to-text and text-to-speech directly in the browser, using a cloud-based LLM for intelligence.
+A real-time, privacy-focused voice assistant that runs speech-to-text directly in the browser using WASM, paired with Gemini 3.8 Neural Speech and low-latency cloud intelligence.
+
+<p align="center">
+  <img src="public/demo.gif" alt="Acoustic AI Voice Studio Launch Demo" width="100%" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+</p>
+
+<p align="center">
+  <a href="public/demo.mp4">▶️ <b>Watch 1080p High-Fidelity Launch Video (MP4)</b></a>
+</p>
 
 ---
 
